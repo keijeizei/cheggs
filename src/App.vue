@@ -147,6 +147,8 @@ const handleCellClick = (rowIndex, colIndex) => {
     selectedPieceCol.value = colIndex;
     selectedPieceColor.value = selectedPiece;
 
+    availableMoves.value = structuredClone(EMPTY_BOARD);
+
     // find all possible moves
     for (let i = 0; i < availableMoves.value.length; i++) {
       for (let j = 0; j < availableMoves.value[i].length; j++) {
@@ -177,13 +179,10 @@ const handleCellClick = (rowIndex, colIndex) => {
             // recursively find all possible multiple captures
             recursivelyCheckCapture(i, j, [capturedCoord]);
           }
-        } else {
-          availableMoves.value[i][j] = 0;
         }
       }
     }
   }
-  console.log(availableMoves.value);
 };
 
 /**
@@ -199,24 +198,20 @@ const recursivelyCheckCapture = (row, col, captures) => {
     for (let j = 0; j < availableMoves.value[i].length; j++) {
       const isDiagonalJump = Math.abs(i - row) === 2 && Math.abs(j - col) === 2;
 
-      if (isDiagonalJump) {
-        const capturedCoord = isCapturePossible(i, j, row, col);
+      if (!isDiagonalJump) continue;
 
-        if (!capturedCoord) {
-          continue;
-        }
+      const capturedCoord = isCapturePossible(i, j, row, col);
 
-        const isAlreadyCaptured = captures.some(
-          ([r, c]) => r === capturedCoord[0] && c === capturedCoord[1]
-        );
+      if (!capturedCoord) continue;
 
-        if (isAlreadyCaptured) {
-          continue;
-        }
+      const isAlreadyCaptured = captures.some(
+        ([r, c]) => r === capturedCoord[0] && c === capturedCoord[1]
+      );
 
-        availableMoves.value[i][j] = [...captures, capturedCoord];
-        recursivelyCheckCapture(i, j, [...captures, capturedCoord]);
-      }
+      if (isAlreadyCaptured) continue;
+
+      availableMoves.value[i][j] = [...captures, capturedCoord];
+      recursivelyCheckCapture(i, j, [...captures, capturedCoord]);
     }
   }
 };
