@@ -152,18 +152,16 @@ const handleCellClick = (rowIndex, colIndex) => {
     // find all possible moves
     for (let i = 0; i < availableMoves.value.length; i++) {
       for (let j = 0; j < availableMoves.value[i].length; j++) {
+        const direction = currentPlayer.value === 1 ? -1 : 1;
+
+        // moving should only be forwards, diagonal or side
         const isAdjacent =
-          Math.abs(i - rowIndex) <= 1 &&
-          Math.abs(j - colIndex) <= 1 &&
-          !(i === 0 && j === 0);
+          (i - rowIndex === direction || i - rowIndex === 0) &&
+          Math.abs(j - colIndex) <= 1;
 
         // first capture should be diagonally forwards only
-        let isDiagonalJump;
-        if (currentPlayer.value === 1) {
-          isDiagonalJump = i - rowIndex === -2 && Math.abs(j - colIndex) === 2;
-        } else {
-          isDiagonalJump = i - rowIndex === 2 && Math.abs(j - colIndex) === 2;
-        }
+        const isDiagonalJump =
+          i - rowIndex === direction * 2 && Math.abs(j - colIndex) === 2;
 
         if (isAdjacent) {
           availableMoves.value[i][j] = 1;
