@@ -101,10 +101,13 @@ const handleCellClick = (rowIndex, colIndex) => {
     if (selectedPieceRow.value === null || selectedPieceCol.value === null) {
       return;
     }
-    if (selectedPieceColor.value !== currentPlayer.value) {
+    if (availableMoves.value[rowIndex][colIndex] === 0) {
+      selectedPieceRow.value = null;
+      selectedPieceCol.value = null;
+      availableMoves.value = structuredClone(EMPTY_BOARD);
       return;
     }
-    if (availableMoves.value[rowIndex][colIndex] === 0) {
+    if (selectedPieceColor.value !== currentPlayer.value) {
       return;
     }
 
@@ -139,6 +142,9 @@ const handleCellClick = (rowIndex, colIndex) => {
     // SELECTING A PIECE - find all possible moves
 
     if (selectedPiece !== currentPlayer.value) {
+      selectedPieceRow.value = null;
+      selectedPieceCol.value = null;
+      availableMoves.value = structuredClone(EMPTY_BOARD);
       return;
     }
 
@@ -167,10 +173,10 @@ const handleCellClick = (rowIndex, colIndex) => {
           availableMoves.value[i][j] = 1;
         } else if (isDiagonalJump) {
           const capturedCoord = isCapturePossible(
-            i,
-            j,
             selectedPieceRow.value,
-            selectedPieceCol.value
+            selectedPieceCol.value,
+            i,
+            j
           );
           if (capturedCoord) {
             availableMoves.value[i][j] = [capturedCoord];
@@ -198,7 +204,7 @@ const recursivelyCheckCapture = (row, col, captures) => {
 
       if (!isDiagonalJump) continue;
 
-      const capturedCoord = isCapturePossible(i, j, row, col);
+      const capturedCoord = isCapturePossible(row, col, i, j);
 
       if (!capturedCoord) continue;
 
@@ -216,6 +222,7 @@ const recursivelyCheckCapture = (row, col, captures) => {
 
 /**
  * Check if a capture is possible and return the coordinates of the captured piece if so
+ * Capture is possible if: move is diagonally 2 spaces, the jumped piece is the opponent, and the landing space is empty
  *
  * @param {number} start_row - the starting row position of the piece
  * @param {number} start_col - the starting column position of the piece
@@ -227,10 +234,12 @@ const isCapturePossible = (start_row, start_col, end_row, end_col) => {
   const jumpedPieceCol = (start_col + end_col) / 2;
   const jumpedPiece = board.value[jumpedPieceRow][jumpedPieceCol];
 
+  const opponentColor = currentPlayer.value === 1 ? 2 : 1;
+
   return Math.abs(start_row - end_row) === 2 &&
     Math.abs(start_col - end_col) === 2 &&
-    jumpedPiece !== 0 &&
-    jumpedPiece !== selectedPieceColor.value
+    jumpedPiece === opponentColor &&
+    board.value[end_row][end_col] === 0
     ? [jumpedPieceRow, jumpedPieceCol]
     : false;
 };
