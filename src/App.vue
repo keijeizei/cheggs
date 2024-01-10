@@ -58,11 +58,16 @@
         class="piece player2"
       ></div>
     </div>
+    <Switch
+      label="Force capture (restarts game)"
+      v-model="isForceCaptureEnabled"
+    ></Switch>
   </div>
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, watch } from "vue";
+import Switch from "./components/Switch.vue";
 
 // 0 - invalid move | 1 - valid move | [[x, y], [x, y], ...] - valid move with capture(s)
 const EMPTY_BOARD = [
@@ -74,14 +79,16 @@ const EMPTY_BOARD = [
   [0, 0, 0, 0, 0],
 ];
 
-const board = ref([
+const STARTING_BOARD = [
   [2, 2, 2, 2, 2],
   [2, 2, 2, 2, 2],
   [0, 0, 0, 0, 0],
   [0, 0, 0, 0, 0],
   [1, 1, 1, 1, 1],
   [1, 1, 1, 1, 1],
-]);
+];
+
+const board = ref(structuredClone(STARTING_BOARD));
 
 const availableMoves = ref(structuredClone(EMPTY_BOARD));
 
@@ -91,6 +98,20 @@ let player2PiecesTaken = ref(0);
 let selectedPieceRow = ref(null);
 let selectedPieceCol = ref(null);
 let selectedPieceColor = ref(null);
+
+let isForceCaptureEnabled = ref(false);
+
+// restart the game if force capture is toggled
+watch(isForceCaptureEnabled, () => {
+  board.value = structuredClone(STARTING_BOARD);
+  currentPlayer.value = 1;
+  player1PiecesTaken.value = 0;
+  player2PiecesTaken.value = 0;
+  selectedPieceRow.value = null;
+  selectedPieceCol.value = null;
+  selectedPieceColor.value = null;
+  availableMoves.value = structuredClone(EMPTY_BOARD);
+});
 
 const handleCellClick = (rowIndex, colIndex) => {
   const selectedPiece = board.value[rowIndex][colIndex];
@@ -170,7 +191,13 @@ const handleCellClick = (rowIndex, colIndex) => {
           i - rowIndex === direction * 2 && Math.abs(j - colIndex) === 2;
 
         if (isAdjacent) {
-          availableMoves.value[i][j] = 1;
+          // FORCE CAPTURE: allow adjacent moves only if there are no captures on the board
+          if (
+            !isForceCaptureEnabled.value ||
+            (isForceCaptureEnabled.value && !checkIfBoardHasCapture())
+          ) {
+            availableMoves.value[i][j] = 1;
+          }
         } else if (isDiagonalJump) {
           const capturedCoord = isCapturePossible(
             selectedPieceRow.value,
@@ -242,6 +269,49 @@ const isCapturePossible = (start_row, start_col, end_row, end_col) => {
     board.value[end_row][end_col] === 0
     ? [jumpedPieceRow, jumpedPieceCol]
     : false;
+};
+
+/**
+ * Check if the current player has a capture on the board by checking all diagonals
+ * [ ] <- topColor
+ *    [ ] <- opponentColor
+ *       [ ] <- bottomColor
+ *
+ * @returns {boolean} - true if there is a capture, false otherwise
+ */
+const checkIfBoardHasCapture = () => {
+  const ROW_LENGTH = 6;
+  const COL_LENGTH = 5;
+
+  const topColor = currentPlayer.value === 2 ? currentPlayer.value : 0;
+  const bottomColor = currentPlayer.value === 1 ? currentPlayer.value : 0;
+  const opponentColor = currentPlayer.value === 1 ? 2 : 1;
+
+  for (let i = 0; i < ROW_LENGTH - 2; i++) {
+    for (let j = 0; j < COL_LENGTH - 2; j++) {
+      // Check if the 3-adjacent diagonal triple is a capture
+      if (
+        board.value[i][j] === topColor &&
+        board.value[i + 1][j + 1] === opponentColor &&
+        board.value[i + 2][j + 2] === bottomColor
+      ) {
+        return true;
+      }
+    }
+  }
+  for (let i = 0; i < ROW_LENGTH - 2; i++) {
+    for (let j = 2; j < COL_LENGTH; j++) {
+      // Check if the 3-adjacent diagonal triple is a capture
+      if (
+        board.value[i][j] === topColor &&
+        board.value[i + 1][j + 1] === opponentColor &&
+        board.value[i + 2][j + 2] === bottomColor
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
 };
 
 const isSelectedPiece = (row, col) => {
