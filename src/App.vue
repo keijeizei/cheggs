@@ -1,9 +1,16 @@
 <template>
   <div class="container">
     <div class="current-player-container">
-      <div v-if="currentPlayer === 1" class="piece player1"></div>
-      <div v-else class="piece player2"></div>
-      <p>'s turn</p>
+      <template v-if="isGameOngoing">
+        <div v-if="currentPlayer === 1" class="piece player1"></div>
+        <div v-else class="piece player2"></div>
+        <p>'s turn</p>
+      </template>
+      <template v-else>
+        <div v-if="currentPlayer === 1" class="piece player1"></div>
+        <div v-else class="piece player2"></div>
+        <p>wins!</p>
+      </template>
     </div>
     <div class="taken-container">
       <div
@@ -98,8 +105,10 @@ let player2PiecesTaken = ref(0);
 let selectedPieceRow = ref(null);
 let selectedPieceCol = ref(null);
 let selectedPieceColor = ref(null);
+let isGameOngoing = ref(true);
 
 let isForceCaptureEnabled = ref(false);
+let winByCapturingAll = ref(false);
 
 // restart the game if force capture is toggled
 watch(isForceCaptureEnabled, () => {
@@ -110,10 +119,13 @@ watch(isForceCaptureEnabled, () => {
   selectedPieceRow.value = null;
   selectedPieceCol.value = null;
   selectedPieceColor.value = null;
+  isGameOngoing.value = true;
   availableMoves.value = structuredClone(EMPTY_BOARD);
 });
 
 const handleCellClick = (rowIndex, colIndex) => {
+  if (!isGameOngoing.value) return;
+
   const selectedPiece = board.value[rowIndex][colIndex];
 
   if (selectedPiece === 0) {
@@ -152,13 +164,24 @@ const handleCellClick = (rowIndex, colIndex) => {
     board.value[rowIndex][colIndex] = currentPlayer.value;
     board.value[selectedPieceRow.value][selectedPieceCol.value] = 0;
 
-    // switch player
-    currentPlayer.value = currentPlayer.value === 1 ? 2 : 1;
-
     // reset the selected piece coordinates
     selectedPieceRow.value = null;
     selectedPieceCol.value = null;
     availableMoves.value = structuredClone(EMPTY_BOARD);
+
+    // WIN BY CROSSING THE BOARD
+    if (!winByCapturingAll.value) {
+      if (
+        (currentPlayer.value === 1 && rowIndex === 0) ||
+        (currentPlayer.value === 2 && rowIndex === 5)
+      ) {
+        isGameOngoing.value = false;
+        return;
+      }
+    }
+
+    // switch player
+    currentPlayer.value = currentPlayer.value === 1 ? 2 : 1;
   } else {
     // SELECTING A PIECE - find all possible moves
 
