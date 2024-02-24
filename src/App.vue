@@ -43,6 +43,8 @@
             :key="colIndex"
             class="cell"
             @click="handleCellClick(rowIndex, colIndex)"
+            @dragover.prevent
+            @drop="handleCellClick(rowIndex, colIndex)"
           >
             <div
               v-if="egg && egg.color === 'white'"
@@ -51,6 +53,9 @@
                 white: true,
                 'selected-piece': egg.is_selected,
               }"
+              draggable="true"
+              @dragstart="handleCellClick(rowIndex, colIndex)"
+              @dragend="handleCellClick(rowIndex, colIndex)"
             ></div>
             <div
               v-else-if="egg && egg.color === 'black'"
@@ -59,6 +64,9 @@
                 black: true,
                 'selected-piece': egg.is_selected,
               }"
+              draggable="true"
+              @dragstart="handleCellClick(rowIndex, colIndex)"
+              @dragend="handleCellClick(rowIndex, colIndex)"
             ></div>
             <div
               v-else-if="
@@ -324,6 +332,8 @@ class Board {
       }
     }
 
+    console.log(`(${egg.x_pos}, ${egg.y_pos}) - (${newX}, ${newY})`);
+
     egg.x_pos = newX;
     egg.y_pos = newY;
 
@@ -461,6 +471,7 @@ const restartGame = () => {
   blackScore.value = 0;
   winner.value = null;
   board.calculateAllPossibleMoves();
+  console.log("Game restarted");
 };
 
 const checkIfCoordInBoard = (coords) => {
