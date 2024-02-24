@@ -1,23 +1,37 @@
 <template>
+  <!-- Settings modal -->
+  <Modal :is-open="is_modal_open" :close-modal="toggleModal">
+    <Switch label="Force capture" v-model="settings.force_capture"></Switch>
+    <Switch
+      label="Allow backwards on first capture"
+      v-model="settings.allow_backwards"
+    ></Switch>
+    <div class="about-text">
+      Made with 🥚 by Zoren.
+      <a
+        href="https://github.com/keijeizei/cheggs"
+        target="_blank"
+        rel="noopener noreferrer"
+        >GitHub</a
+      >
+    </div>
+  </Modal>
+
   <div class="container">
     <div class="current-player-container">
-      <template v-if="isGameOngoing">
-        <div v-if="currentPlayer === 'white'" class="piece player1"></div>
-        <div v-else class="piece player2"></div>
+      <template v-if="!winner">
+        <div v-if="currentPlayer === 'white'" class="piece white"></div>
+        <div v-else class="piece black"></div>
         <p>'s turn</p>
       </template>
       <template v-else>
-        <div v-if="currentPlayer === 'black'" class="piece player1"></div>
-        <div v-else class="piece player2"></div>
+        <div v-if="winner === 'white'" class="piece white"></div>
+        <div v-else-if="winner === 'black'" class="piece black"></div>
         <p>wins!</p>
       </template>
     </div>
     <div class="taken-container">
-      <div
-        v-for="taken in player2PiecesTaken"
-        :key="taken"
-        class="piece player1"
-      ></div>
+      <div v-for="taken in blackScore" :key="taken" class="piece white"></div>
     </div>
 
     <div class="tray-container">
@@ -34,7 +48,7 @@
               v-if="egg && egg.color === 'white'"
               :class="{
                 piece: true,
-                player1: true,
+                white: true,
                 'selected-piece': egg.is_selected,
               }"
             ></div>
@@ -42,7 +56,7 @@
               v-else-if="egg && egg.color === 'black'"
               :class="{
                 piece: true,
-                player2: true,
+                black: true,
                 'selected-piece': egg.is_selected,
               }"
             ></div>
@@ -51,10 +65,7 @@
                 board.selected_egg &&
                 board.selected_egg.available_moves[rowIndex][colIndex]
               "
-              :class="{
-                piece: true,
-                'available-move': true,
-              }"
+              class="piece available-move"
             ></div>
           </div>
         </div>
@@ -62,23 +73,18 @@
     </div>
 
     <div class="taken-container">
-      <div
-        v-for="taken in player1PiecesTaken"
-        :key="taken"
-        class="piece player2"
-      ></div>
+      <div v-for="taken in whiteScore" :key="taken" class="piece black"></div>
     </div>
-    <Switch label="Force capture" v-model="settings.force_capture"></Switch>
-    <Switch
-      label="Allow backwards on first capture"
-      v-model="settings.allow_backwards"
-    ></Switch>
-    <button @click="restartGame">Restart</button>
+    <button @click="toggleModal">Settings</button>
+    <button :class="{ 'green-bg': winner }" @click="restartGame">
+      Restart
+    </button>
   </div>
 </template>
 
 <script setup>
 import { reactive, ref, watch } from "vue";
+import Modal from "./components/Modal.vue";
 import Switch from "./components/Switch.vue";
 
 const MAX_ROWS = 6;
@@ -130,7 +136,7 @@ class Egg {
     this.resetAvailableMoves();
 
     // get available captures
-    let captures = this.getAvailableCaptures(
+    this.getAvailableCaptures(
       this.x_pos,
       this.y_pos,
       [],
@@ -160,6 +166,14 @@ class Egg {
     return this.getMoveAndCaptureCount();
   }
 
+  /**
+   * Get all available captures for the egg. Can be called recursively
+   * @param {number} x - x position of the egg
+   * @param {number} y - y position of the egg
+   * @param {Array} previous_captures - Array of previous captures in the current sequence
+   * @param {boolean} allow_backwards - Whether to allow backwards captures
+   * @returns {Array} - Array of available captures
+   */
   getAvailableCaptures(x, y, previous_captures = [], allow_backwards = false) {
     if (this.is_captured) {
       return [];
@@ -233,8 +247,15 @@ class Egg {
     return capture_candidates;
   }
 
+  /**
+   * Check if a capture is possible. Requires:
+   * - A captured egg of the opponent's color on [capture.captured_x, capture.captured_y]
+   * - An empty cell on [capture.x, capture.y]
+   * @param {Object} capture - Object containing the x, y, captured_x, and captured_y of the capture
+   * @returns {boolean} - Whether the capture is possible
+   */
   isCapturePossible(capture) {
-    const capturedEgg = board.grid[capture.captured_x][capture.captured_y];
+    const capturedEgg = board.getEggAt(capture.captured_x, capture.captured_y);
     const opponentColor = getOtherColor(this.color);
 
     return (
@@ -247,6 +268,10 @@ class Egg {
 
 class Board {
   constructor() {
+    this.reset();
+  }
+
+  reset() {
     this.selected_egg = null;
     this.eggs = [];
     this.grid = Array(MAX_ROWS)
@@ -284,14 +309,15 @@ class Board {
   moveEgg(egg, newX, newY) {
     this.grid[egg.x_pos][egg.y_pos] = null;
 
+    // if the move is a capture (array), capture all the eggs to be captured
     if (Array.isArray(egg.available_moves[newX][newY])) {
       for (const captures of egg.available_moves[newX][newY]) {
         const capturedEgg = this.getEggAt(captures.x, captures.y);
         capturedEgg.is_captured = true;
         if (capturedEgg.color === "white") {
-          player2PiecesTaken.value++;
+          blackScore.value++;
         } else {
-          player1PiecesTaken.value++;
+          whiteScore.value++;
         }
         this.grid[captures.x][captures.y] = null;
       }
@@ -306,6 +332,10 @@ class Board {
     this.selected_egg = null;
   }
 
+  /**
+   * Calculate all possible moves for the current player
+   * @returns {Object} - Object containing the total number of available moves and captures
+   */
   calculateAllPossibleMoves() {
     let total_moves = 0;
     let total_captures = 0;
@@ -316,50 +346,75 @@ class Board {
         total_captures += captures_count;
       }
     }
-    console.log(total_moves, total_captures);
 
+    // delete all available moves if force capture is enabled and there are captures available
     if (settings.value.force_capture && total_captures > 0) {
       for (let egg of this.eggs) {
         if (egg.color === currentPlayer.value) {
           egg.available_moves = egg.available_moves.map((row) =>
             row.map((cell) => (cell === 1 ? null : cell))
           );
-          console.log(egg.available_moves);
         }
       }
     }
+
+    return { total_moves, total_captures };
+  }
+
+  checkForWinner() {
+    let whiteEggs = this.eggs.filter((egg) => egg.color === "white");
+    let blackEggs = this.eggs.filter((egg) => egg.color === "black");
+
+    if (settings.value.win_by_capturing_all) {
+      if (whiteEggs.length === 0) {
+        return "black";
+      } else if (blackEggs.length === 0) {
+        return "white";
+      }
+    } else if (settings.value.win_by_promotion) {
+      for (let egg of whiteEggs) {
+        if (egg.x_pos === 0) {
+          return "white";
+        }
+      }
+      for (let egg of blackEggs) {
+        if (egg.x_pos === MAX_ROWS - 1) {
+          return "black";
+        }
+      }
+    }
+    return null;
   }
 }
 
 let board = reactive(new Board());
-console.log(board.grid);
-console.log(board.eggs);
-
 let currentPlayer = ref("white");
-let player1PiecesTaken = ref(0);
-let player2PiecesTaken = ref(0);
-let isGameOngoing = ref(true);
+let whiteScore = ref(0);
+let blackScore = ref(0);
+let winner = ref(null);
 
 let settings = ref({
   force_capture: false,
   win_by_capturing_all: false,
+  win_by_promotion: true,
   allow_backwards: false,
 });
+
+let is_modal_open = ref(false);
 
 // recalculate available moves when the settings change
 watch(
   settings,
   () => {
-    console.log("here");
     board.calculateAllPossibleMoves();
   },
   { deep: true }
 );
 
 const handleCellClick = (rowIndex, colIndex) => {
-  if (!isGameOngoing.value) return;
+  if (winner.value) return;
 
-  const selected_egg = board.grid[rowIndex][colIndex];
+  const selected_egg = board.getEggAt(rowIndex, colIndex);
 
   if (selected_egg) {
     // SELECTING AN EGG
@@ -374,20 +429,36 @@ const handleCellClick = (rowIndex, colIndex) => {
     if (!board.selected_egg.available_moves[rowIndex][colIndex]) {
       return;
     }
+
+    // make the move
     board.moveEgg(board.selected_egg, rowIndex, colIndex);
+
+    // check for winner
+    let possible_winner = board.checkForWinner();
+    if (possible_winner) {
+      winner.value = possible_winner;
+      return;
+    }
+
     currentPlayer.value = getOtherColor(currentPlayer.value);
 
     // calculate all moves of the next player
-    board.calculateAllPossibleMoves();
+    let { total_moves, total_captures } = board.calculateAllPossibleMoves();
+
+    // declare winner if the other player has no moves left
+    if (total_moves + total_captures === 0) {
+      winner.value = currentPlayer.value === "white" ? "black" : "white";
+      return;
+    }
   }
 };
 
 const restartGame = () => {
-  board = reactive(new Board());
+  board.reset();
   currentPlayer.value = "white";
-  player1PiecesTaken.value = 0;
-  player2PiecesTaken.value = 0;
-  isGameOngoing.value = true;
+  whiteScore.value = 0;
+  blackScore.value = 0;
+  winner.value = null;
   board.calculateAllPossibleMoves();
 };
 
@@ -399,6 +470,11 @@ const checkIfCoordInBoard = (coords) => {
 
 const getOtherColor = (color) => (color === "white" ? "black" : "white");
 
+const toggleModal = () => {
+  is_modal_open.value = !is_modal_open.value;
+};
+
+// GAME START
 board.calculateAllPossibleMoves();
 </script>
 
@@ -407,17 +483,27 @@ p {
   font-family: sans-serif;
 }
 
+button {
+  width: 320px;
+  margin: 3px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  background-color: #ccc;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #eca075;
+}
+
 .container {
   display: flex;
   flex-direction: column;
   align-items: center;
   height: 90vh;
-}
-
-.tray-container {
-  /* display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 2px; */
 }
 
 .tray {
@@ -457,11 +543,11 @@ p {
   box-shadow: 0 0 10px 0px rgba(0, 0, 0, 0.75);
 }
 
-.player1 {
+.white {
   background: radial-gradient(circle, #f9faf7, #9fa2a8 80%, #733625 100%);
 }
 
-.player2 {
+.black {
   background: radial-gradient(circle, #eca075, #b15434 80%, #733625 100%);
 }
 
@@ -491,5 +577,27 @@ p {
   height: 40px;
   margin: 10px;
   padding: 5px;
+  background-color: #ccc;
+  /* border: 1px solid #6f6f6f; */
+  border-radius: 8px;
+  box-shadow: inset 0 0 10px #aaa;
+}
+
+.about-text {
+  margin-top: 20px;
+  font-size: 14px;
+  text-align: center;
+  color: white;
+  font-family: sans-serif;
+}
+
+.about-text a {
+  color: white;
+  text-decoration: underline;
+}
+
+/* COLORS */
+.green-bg {
+  background-color: #71e382;
 }
 </style>
