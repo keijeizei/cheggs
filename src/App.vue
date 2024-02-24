@@ -1,50 +1,71 @@
 <template>
+  <!-- Settings modal -->
+  <Modal :is-open="is_modal_open" :close-modal="toggleModal">
+    <Switch label="Force capture" v-model="settings.force_capture"></Switch>
+    <Switch
+      label="Allow backwards on first capture"
+      v-model="settings.allow_backwards"
+    ></Switch>
+    <div class="about-text">
+      Made with 🥚 by Zoren.
+      <a
+        href="https://github.com/keijeizei/cheggs"
+        target="_blank"
+        rel="noopener noreferrer"
+        >GitHub</a
+      >
+    </div>
+  </Modal>
+
   <div class="container">
     <div class="current-player-container">
-      <div v-if="currentPlayer === 1" class="piece player1"></div>
-      <div v-else class="piece player2"></div>
-      <p>'s turn</p>
+      <template v-if="!winner">
+        <div v-if="currentPlayer === 'white'" class="piece white"></div>
+        <div v-else class="piece black"></div>
+        <p>'s turn</p>
+      </template>
+      <template v-else>
+        <div v-if="winner === 'white'" class="piece white"></div>
+        <div v-else-if="winner === 'black'" class="piece black"></div>
+        <p>wins!</p>
+      </template>
     </div>
     <div class="taken-container">
-      <div
-        v-for="taken in player2PiecesTaken"
-        :key="taken"
-        class="piece player1"
-      ></div>
+      <div v-for="taken in blackScore" :key="taken" class="piece white"></div>
     </div>
 
     <div class="tray-container">
       <img src="/src/assets/tray.png" alt="tray" class="tray-bg" />
       <div class="tray">
-        <div v-for="(row, rowIndex) in board" :key="rowIndex" class="row">
+        <div v-for="(row, rowIndex) in board.grid" :key="rowIndex" class="row">
           <div
-            v-for="(cell, colIndex) in row"
+            v-for="(egg, colIndex) in row"
             :key="colIndex"
             class="cell"
             @click="handleCellClick(rowIndex, colIndex)"
           >
             <div
-              v-if="cell === 1"
+              v-if="egg && egg.color === 'white'"
               :class="{
                 piece: true,
-                player1: true,
-                'selected-piece': isSelectedPiece(rowIndex, colIndex),
+                white: true,
+                'selected-piece': egg.is_selected,
               }"
             ></div>
             <div
-              v-else-if="cell === 2"
+              v-else-if="egg && egg.color === 'black'"
               :class="{
                 piece: true,
-                player2: true,
-                'selected-piece': isSelectedPiece(rowIndex, colIndex),
+                black: true,
+                'selected-piece': egg.is_selected,
               }"
             ></div>
             <div
-              v-else-if="availableMoves[rowIndex][colIndex]"
-              :class="{
-                piece: true,
-                'available-move': true,
-              }"
+              v-else-if="
+                board.selected_egg &&
+                board.selected_egg.available_moves[rowIndex][colIndex]
+              "
+              class="piece available-move"
             ></div>
           </div>
         </div>
@@ -52,271 +73,409 @@
     </div>
 
     <div class="taken-container">
-      <div
-        v-for="taken in player1PiecesTaken"
-        :key="taken"
-        class="piece player2"
-      ></div>
+      <div v-for="taken in whiteScore" :key="taken" class="piece black"></div>
     </div>
-    <Switch
-      label="Force capture (restarts game)"
-      v-model="isForceCaptureEnabled"
-    ></Switch>
+    <button @click="toggleModal">Settings</button>
+    <button :class="{ 'green-bg': winner }" @click="restartGame">
+      Restart
+    </button>
   </div>
 </template>
 
 <script setup>
-import { ref, watch } from "vue";
+import { reactive, ref, watch } from "vue";
+import Modal from "./components/Modal.vue";
 import Switch from "./components/Switch.vue";
 
-// 0 - invalid move | 1 - valid move | [[x, y], [x, y], ...] - valid move with capture(s)
-const EMPTY_BOARD = [
-  [0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0],
-];
+const MAX_ROWS = 6;
+const MAX_COLS = 5;
+const NUM_EGGS = 10;
 
-const STARTING_BOARD = [
-  [2, 2, 2, 2, 2],
-  [2, 2, 2, 2, 2],
-  [0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0],
-  [1, 1, 1, 1, 1],
-  [1, 1, 1, 1, 1],
-];
+class Egg {
+  constructor(color, x_pos, y_pos, is_captured = false) {
+    this.color = color;
+    this.x_pos = x_pos;
+    this.y_pos = y_pos;
+    this.is_selected = false;
+    this.is_captured = is_captured;
+    this.available_moves = Array(MAX_ROWS)
+      .fill()
+      .map(() => Array(MAX_COLS).fill(null));
+  }
 
-const board = ref(structuredClone(STARTING_BOARD));
+  resetAvailableMoves() {
+    this.available_moves = Array(MAX_ROWS)
+      .fill()
+      .map(() => Array(MAX_COLS).fill(null));
+  }
 
-const availableMoves = ref(structuredClone(EMPTY_BOARD));
+  getMoveAndCaptureCount() {
+    let moves_count = 0;
+    let captures_count = 0;
+    for (let i = 0; i < MAX_ROWS; i++) {
+      for (let j = 0; j < MAX_COLS; j++) {
+        if (this.available_moves[i][j] === 1) {
+          moves_count++;
+        } else if (Array.isArray(this.available_moves[i][j])) {
+          captures_count++;
+        }
+      }
+    }
+    return { moves_count, captures_count };
+  }
 
-let currentPlayer = ref(1);
-let player1PiecesTaken = ref(0);
-let player2PiecesTaken = ref(0);
-let selectedPieceRow = ref(null);
-let selectedPieceCol = ref(null);
-let selectedPieceColor = ref(null);
+  /**
+   * Get all available moves and captures for the egg
+   * @returns {Object} - Object containing the number of available moves and captures
+   */
+  getAvailableMoves() {
+    if (this.is_captured) {
+      return { moves_count: 0, captures_count: 0 };
+    }
 
-let isForceCaptureEnabled = ref(false);
+    this.resetAvailableMoves();
 
-// restart the game if force capture is toggled
-watch(isForceCaptureEnabled, () => {
-  board.value = structuredClone(STARTING_BOARD);
-  currentPlayer.value = 1;
-  player1PiecesTaken.value = 0;
-  player2PiecesTaken.value = 0;
-  selectedPieceRow.value = null;
-  selectedPieceCol.value = null;
-  selectedPieceColor.value = null;
-  availableMoves.value = structuredClone(EMPTY_BOARD);
+    // get available captures
+    this.getAvailableCaptures(
+      this.x_pos,
+      this.y_pos,
+      [],
+      settings.value.allow_backwards
+    );
+
+    // get available moves
+    let direction = this.color === "white" ? -1 : 1;
+    let moves = [
+      { x: this.x_pos + direction, y: this.y_pos - 1 },
+      { x: this.x_pos + direction, y: this.y_pos },
+      { x: this.x_pos + direction, y: this.y_pos + 1 },
+
+      { x: this.x_pos, y: this.y_pos - 1 },
+      { x: this.x_pos, y: this.y_pos + 1 },
+    ];
+
+    // filter out moves that are outside the grid and already occupied
+    moves = moves.filter(
+      (move) => checkIfCoordInBoard(move) && !board.getEggAt(move.x, move.y)
+    );
+
+    for (let move of moves) {
+      this.available_moves[move.x][move.y] = 1;
+    }
+
+    return this.getMoveAndCaptureCount();
+  }
+
+  /**
+   * Get all available captures for the egg. Can be called recursively
+   * @param {number} x - x position of the egg
+   * @param {number} y - y position of the egg
+   * @param {Array} previous_captures - Array of previous captures in the current sequence
+   * @param {boolean} allow_backwards - Whether to allow backwards captures
+   * @returns {Array} - Array of available captures
+   */
+  getAvailableCaptures(x, y, previous_captures = [], allow_backwards = false) {
+    if (this.is_captured) {
+      return [];
+    }
+
+    let direction = this.color === "white" ? -1 : 1;
+    let capture_candidates = [
+      {
+        x: x + direction * 2,
+        y: y - 2,
+        captured_x: x + direction,
+        captured_y: y - 1,
+      },
+      {
+        x: x + direction * 2,
+        y: y + 2,
+        captured_x: x + direction,
+        captured_y: y + 1,
+      },
+    ];
+
+    if (allow_backwards) {
+      capture_candidates.push(
+        {
+          x: x - direction * 2,
+          y: y - 2,
+          captured_x: x - direction,
+          captured_y: y - 1,
+        },
+        {
+          x: x - direction * 2,
+          y: y + 2,
+          captured_x: x - direction,
+          captured_y: y + 1,
+        }
+      );
+    }
+
+    // filter out captures that are outside the grid
+    capture_candidates = capture_candidates.filter(
+      (capture) =>
+        checkIfCoordInBoard(capture) && this.isCapturePossible(capture)
+    );
+
+    for (let capture of capture_candidates) {
+      // skip if the capture has already been made in the current sequence
+      if (
+        previous_captures.some(
+          (c) => c.x === capture.captured_x && c.y === capture.captured_y
+        )
+      ) {
+        continue;
+      }
+
+      this.available_moves[capture.x][capture.y] = [
+        ...previous_captures,
+        { x: capture.captured_x, y: capture.captured_y },
+      ];
+
+      this.getAvailableCaptures(
+        capture.x,
+        capture.y,
+        [
+          ...previous_captures,
+          { x: capture.captured_x, y: capture.captured_y },
+        ],
+        true
+      );
+    }
+
+    return capture_candidates;
+  }
+
+  /**
+   * Check if a capture is possible. Requires:
+   * - A captured egg of the opponent's color on [capture.captured_x, capture.captured_y]
+   * - An empty cell on [capture.x, capture.y]
+   * @param {Object} capture - Object containing the x, y, captured_x, and captured_y of the capture
+   * @returns {boolean} - Whether the capture is possible
+   */
+  isCapturePossible(capture) {
+    const capturedEgg = board.getEggAt(capture.captured_x, capture.captured_y);
+    const opponentColor = getOtherColor(this.color);
+
+    return (
+      capturedEgg &&
+      capturedEgg.color === opponentColor &&
+      board.grid[capture.x][capture.y] === null
+    );
+  }
+}
+
+class Board {
+  constructor() {
+    this.reset();
+  }
+
+  reset() {
+    this.selected_egg = null;
+    this.eggs = [];
+    this.grid = Array(MAX_ROWS)
+      .fill()
+      .map(() => Array(MAX_COLS).fill(null));
+
+    // initialize the board with eggs
+    for (let i = 0; i < NUM_EGGS; i++) {
+      let x_pos = Math.floor(i / MAX_COLS);
+      let y_pos = i % MAX_COLS;
+
+      let whiteEgg = reactive(new Egg("black", x_pos, y_pos));
+      this.eggs.push(whiteEgg);
+      this.grid[x_pos][y_pos] = whiteEgg;
+
+      x_pos = MAX_ROWS - Math.floor(i / MAX_COLS) - 1;
+      let blackEgg = reactive(new Egg("white", x_pos, y_pos));
+      this.eggs.push(blackEgg);
+      this.grid[x_pos][y_pos] = blackEgg;
+    }
+  }
+
+  selectEgg(egg) {
+    if (this.selected_egg) {
+      this.selected_egg.is_selected = false;
+    }
+    this.selected_egg = egg;
+    this.selected_egg.is_selected = true;
+  }
+
+  getEggAt(x, y) {
+    return this.grid[x][y];
+  }
+
+  moveEgg(egg, newX, newY) {
+    this.grid[egg.x_pos][egg.y_pos] = null;
+
+    // if the move is a capture (array), capture all the eggs to be captured
+    if (Array.isArray(egg.available_moves[newX][newY])) {
+      for (const captures of egg.available_moves[newX][newY]) {
+        const capturedEgg = this.getEggAt(captures.x, captures.y);
+        capturedEgg.is_captured = true;
+        if (capturedEgg.color === "white") {
+          blackScore.value++;
+        } else {
+          whiteScore.value++;
+        }
+        this.grid[captures.x][captures.y] = null;
+      }
+    }
+
+    egg.x_pos = newX;
+    egg.y_pos = newY;
+
+    this.grid[newX][newY] = egg;
+
+    this.selected_egg.is_selected = false;
+    this.selected_egg = null;
+  }
+
+  /**
+   * Calculate all possible moves for the current player
+   * @returns {Object} - Object containing the total number of available moves and captures
+   */
+  calculateAllPossibleMoves() {
+    let total_moves = 0;
+    let total_captures = 0;
+    for (let egg of this.eggs) {
+      if (egg.color === currentPlayer.value) {
+        const { moves_count, captures_count } = egg.getAvailableMoves();
+        total_moves += moves_count;
+        total_captures += captures_count;
+      }
+    }
+
+    // delete all available moves if force capture is enabled and there are captures available
+    if (settings.value.force_capture && total_captures > 0) {
+      for (let egg of this.eggs) {
+        if (egg.color === currentPlayer.value) {
+          egg.available_moves = egg.available_moves.map((row) =>
+            row.map((cell) => (cell === 1 ? null : cell))
+          );
+        }
+      }
+    }
+
+    return { total_moves, total_captures };
+  }
+
+  checkForWinner() {
+    let whiteEggs = this.eggs.filter((egg) => egg.color === "white");
+    let blackEggs = this.eggs.filter((egg) => egg.color === "black");
+
+    if (settings.value.win_by_capturing_all) {
+      if (whiteEggs.length === 0) {
+        return "black";
+      } else if (blackEggs.length === 0) {
+        return "white";
+      }
+    } else if (settings.value.win_by_promotion) {
+      for (let egg of whiteEggs) {
+        if (egg.x_pos === 0) {
+          return "white";
+        }
+      }
+      for (let egg of blackEggs) {
+        if (egg.x_pos === MAX_ROWS - 1) {
+          return "black";
+        }
+      }
+    }
+    return null;
+  }
+}
+
+let board = reactive(new Board());
+let currentPlayer = ref("white");
+let whiteScore = ref(0);
+let blackScore = ref(0);
+let winner = ref(null);
+
+let settings = ref({
+  force_capture: false,
+  win_by_capturing_all: false,
+  win_by_promotion: true,
+  allow_backwards: false,
 });
 
+let is_modal_open = ref(false);
+
+// recalculate available moves when the settings change
+watch(
+  settings,
+  () => {
+    board.calculateAllPossibleMoves();
+  },
+  { deep: true }
+);
+
 const handleCellClick = (rowIndex, colIndex) => {
-  const selectedPiece = board.value[rowIndex][colIndex];
+  if (winner.value) return;
 
-  if (selectedPiece === 0) {
-    // MAKING A MOVE - move the piece and remove capture pieces
+  const selected_egg = board.getEggAt(rowIndex, colIndex);
 
-    if (selectedPieceRow.value === null || selectedPieceCol.value === null) {
-      return;
-    }
-    if (availableMoves.value[rowIndex][colIndex] === 0) {
-      selectedPieceRow.value = null;
-      selectedPieceCol.value = null;
-      availableMoves.value = structuredClone(EMPTY_BOARD);
-      return;
-    }
-    if (selectedPieceColor.value !== currentPlayer.value) {
+  if (selected_egg) {
+    // SELECTING AN EGG
+    if (selected_egg.color !== currentPlayer.value) {
       return;
     }
 
-    // DIAGONAL CAPTURE
-    if (Array.isArray(availableMoves.value[rowIndex][colIndex])) {
-      // remove all captured pieces and increment the pieces captured
-      for (const [row, col] of availableMoves.value[rowIndex][colIndex]) {
-        const jumpedPiece = board.value[row][col];
-
-        if (jumpedPiece === 2) {
-          player1PiecesTaken.value++;
-        } else {
-          player2PiecesTaken.value++;
-        }
-
-        board.value[row][col] = 0;
-      }
-    }
-
-    // move the piece
-    board.value[rowIndex][colIndex] = currentPlayer.value;
-    board.value[selectedPieceRow.value][selectedPieceCol.value] = 0;
-
-    // switch player
-    currentPlayer.value = currentPlayer.value === 1 ? 2 : 1;
-
-    // reset the selected piece coordinates
-    selectedPieceRow.value = null;
-    selectedPieceCol.value = null;
-    availableMoves.value = structuredClone(EMPTY_BOARD);
-  } else {
-    // SELECTING A PIECE - find all possible moves
-
-    if (selectedPiece !== currentPlayer.value) {
-      selectedPieceRow.value = null;
-      selectedPieceCol.value = null;
-      availableMoves.value = structuredClone(EMPTY_BOARD);
+    board.selectEgg(selected_egg);
+  } else if (board.selected_egg) {
+    // MAKING A MOVE
+    // check if the move is valid based on the available moves
+    if (!board.selected_egg.available_moves[rowIndex][colIndex]) {
       return;
     }
 
-    // set the selected piece coordinates
-    selectedPieceRow.value = rowIndex;
-    selectedPieceCol.value = colIndex;
-    selectedPieceColor.value = selectedPiece;
+    // make the move
+    board.moveEgg(board.selected_egg, rowIndex, colIndex);
 
-    availableMoves.value = structuredClone(EMPTY_BOARD);
+    // check for winner
+    let possible_winner = board.checkForWinner();
+    if (possible_winner) {
+      winner.value = possible_winner;
+      return;
+    }
 
-    // find all possible moves
-    for (let i = 0; i < availableMoves.value.length; i++) {
-      for (let j = 0; j < availableMoves.value[i].length; j++) {
-        const direction = currentPlayer.value === 1 ? -1 : 1;
+    currentPlayer.value = getOtherColor(currentPlayer.value);
 
-        // moving should only be forwards, diagonal or side
-        const isAdjacent =
-          (i - rowIndex === direction || i - rowIndex === 0) &&
-          Math.abs(j - colIndex) <= 1;
+    // calculate all moves of the next player
+    let { total_moves, total_captures } = board.calculateAllPossibleMoves();
 
-        // first capture should be diagonally forwards only
-        const isDiagonalJump =
-          i - rowIndex === direction * 2 && Math.abs(j - colIndex) === 2;
-
-        if (isAdjacent) {
-          // FORCE CAPTURE: allow adjacent moves only if there are no captures on the board
-          if (
-            !isForceCaptureEnabled.value ||
-            (isForceCaptureEnabled.value && !checkIfBoardHasCapture())
-          ) {
-            availableMoves.value[i][j] = 1;
-          }
-        } else if (isDiagonalJump) {
-          const capturedCoord = isCapturePossible(
-            selectedPieceRow.value,
-            selectedPieceCol.value,
-            i,
-            j
-          );
-          if (capturedCoord) {
-            availableMoves.value[i][j] = [capturedCoord];
-            // recursively find all possible multiple captures
-            recursivelyCheckCapture(i, j, [capturedCoord]);
-          }
-        }
-      }
+    // declare winner if the other player has no moves left
+    if (total_moves + total_captures === 0) {
+      winner.value = currentPlayer.value === "white" ? "black" : "white";
+      return;
     }
   }
 };
 
-/**
- * Recursively check for captures
- * If a capture is possible, push the captured piece to the availableMoves cell
- *
- * @param {number} row - the starting row
- * @param {number} col - the starting column
- * @param {array} captures - the array of captured coordinates
- */
-const recursivelyCheckCapture = (row, col, captures) => {
-  for (let i = 0; i < availableMoves.value.length; i++) {
-    for (let j = 0; j < availableMoves.value[i].length; j++) {
-      const isDiagonalJump = Math.abs(i - row) === 2 && Math.abs(j - col) === 2;
-
-      if (!isDiagonalJump) continue;
-
-      const capturedCoord = isCapturePossible(row, col, i, j);
-
-      if (!capturedCoord) continue;
-
-      const isAlreadyCaptured = captures.some(
-        ([r, c]) => r === capturedCoord[0] && c === capturedCoord[1]
-      );
-
-      if (isAlreadyCaptured) continue;
-
-      availableMoves.value[i][j] = [...captures, capturedCoord];
-      recursivelyCheckCapture(i, j, [...captures, capturedCoord]);
-    }
-  }
+const restartGame = () => {
+  board.reset();
+  currentPlayer.value = "white";
+  whiteScore.value = 0;
+  blackScore.value = 0;
+  winner.value = null;
+  board.calculateAllPossibleMoves();
 };
 
-/**
- * Check if a capture is possible and return the coordinates of the captured piece if so
- * Capture is possible if: move is diagonally 2 spaces, the jumped piece is the opponent, and the landing space is empty
- *
- * @param {number} start_row - the starting row position of the piece
- * @param {number} start_col - the starting column position of the piece
- * @param {number} end_row - the landing row position of the piece
- * @param {number} end_col - the landing column position of the piece
- */
-const isCapturePossible = (start_row, start_col, end_row, end_col) => {
-  const jumpedPieceRow = (start_row + end_row) / 2;
-  const jumpedPieceCol = (start_col + end_col) / 2;
-  const jumpedPiece = board.value[jumpedPieceRow][jumpedPieceCol];
-
-  const opponentColor = currentPlayer.value === 1 ? 2 : 1;
-
-  return Math.abs(start_row - end_row) === 2 &&
-    Math.abs(start_col - end_col) === 2 &&
-    jumpedPiece === opponentColor &&
-    board.value[end_row][end_col] === 0
-    ? [jumpedPieceRow, jumpedPieceCol]
-    : false;
+const checkIfCoordInBoard = (coords) => {
+  return (
+    coords.x >= 0 && coords.x < MAX_ROWS && coords.y >= 0 && coords.y < MAX_COLS
+  );
 };
 
-/**
- * Check if the current player has a capture on the board by checking all diagonals
- * [ ] <- topColor
- *    [ ] <- opponentColor
- *       [ ] <- bottomColor
- *
- * @returns {boolean} - true if there is a capture, false otherwise
- */
-const checkIfBoardHasCapture = () => {
-  const ROW_LENGTH = 6;
-  const COL_LENGTH = 5;
+const getOtherColor = (color) => (color === "white" ? "black" : "white");
 
-  const topColor = currentPlayer.value === 2 ? currentPlayer.value : 0;
-  const bottomColor = currentPlayer.value === 1 ? currentPlayer.value : 0;
-  const opponentColor = currentPlayer.value === 1 ? 2 : 1;
-
-  for (let i = 0; i < ROW_LENGTH - 2; i++) {
-    for (let j = 0; j < COL_LENGTH - 2; j++) {
-      // Check if the 3-adjacent diagonal triple is a capture
-      if (
-        board.value[i][j] === topColor &&
-        board.value[i + 1][j + 1] === opponentColor &&
-        board.value[i + 2][j + 2] === bottomColor
-      ) {
-        return true;
-      }
-    }
-  }
-  for (let i = 0; i < ROW_LENGTH - 2; i++) {
-    for (let j = 2; j < COL_LENGTH; j++) {
-      // Check if the 3-adjacent diagonal triple is a capture
-      if (
-        board.value[i][j] === topColor &&
-        board.value[i + 1][j + 1] === opponentColor &&
-        board.value[i + 2][j + 2] === bottomColor
-      ) {
-        return true;
-      }
-    }
-  }
-  return false;
+const toggleModal = () => {
+  is_modal_open.value = !is_modal_open.value;
 };
 
-const isSelectedPiece = (row, col) => {
-  return selectedPieceRow.value === row && selectedPieceCol.value === col;
-};
+// GAME START
+board.calculateAllPossibleMoves();
 </script>
 
 <style scoped>
@@ -324,17 +483,27 @@ p {
   font-family: sans-serif;
 }
 
+button {
+  width: 320px;
+  margin: 3px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  background-color: #ccc;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #eca075;
+}
+
 .container {
   display: flex;
   flex-direction: column;
   align-items: center;
   height: 90vh;
-}
-
-.tray-container {
-  /* display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 2px; */
 }
 
 .tray {
@@ -374,11 +543,11 @@ p {
   box-shadow: 0 0 10px 0px rgba(0, 0, 0, 0.75);
 }
 
-.player1 {
+.white {
   background: radial-gradient(circle, #f9faf7, #9fa2a8 80%, #733625 100%);
 }
 
-.player2 {
+.black {
   background: radial-gradient(circle, #eca075, #b15434 80%, #733625 100%);
 }
 
@@ -408,5 +577,27 @@ p {
   height: 40px;
   margin: 10px;
   padding: 5px;
+  background-color: #ccc;
+  /* border: 1px solid #6f6f6f; */
+  border-radius: 8px;
+  box-shadow: inset 0 0 10px #aaa;
+}
+
+.about-text {
+  margin-top: 20px;
+  font-size: 14px;
+  text-align: center;
+  color: white;
+  font-family: sans-serif;
+}
+
+.about-text a {
+  color: white;
+  text-decoration: underline;
+}
+
+/* COLORS */
+.green-bg {
+  background-color: #71e382;
 }
 </style>

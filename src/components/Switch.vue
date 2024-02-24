@@ -1,5 +1,5 @@
 <template>
-  <div class="container">
+  <div class="switch-container">
     <p>{{ label }}</p>
     <label class="switch">
       <input type="checkbox" v-model="computedValue" />
@@ -29,10 +29,17 @@ const computedValue = computed({
 <style scoped>
 p {
   font-family: sans-serif;
+  color: white;
+  margin: 0;
 }
 
-.container {
+.switch-container {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 5px;
+  margin: 10px;
+  width: 95%;
 }
 
 .switch {
@@ -75,11 +82,11 @@ p {
 }
 
 input:checked + .slider {
-  background-color: #2196f3;
+  background-color: #71e382;
 }
 
 input:focus + .slider {
-  box-shadow: 0 0 1px #2196f3;
+  box-shadow: 0 0 1px #71e382;
 }
 
 input:checked + .slider:before {
