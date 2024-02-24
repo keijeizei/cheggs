@@ -22,7 +22,7 @@
       <template v-if="!winner">
         <div v-if="currentPlayer === 'white'" class="piece white"></div>
         <div v-else class="piece black"></div>
-        <p>'s turn</p>
+        <p>to move</p>
       </template>
       <template v-else>
         <div v-if="winner === 'white'" class="piece white"></div>
@@ -98,6 +98,7 @@ class Egg {
     this.y_pos = y_pos;
     this.is_selected = false;
     this.is_captured = is_captured;
+    // moves are stored as 1, captures are stored as an array of coordinates
     this.available_moves = Array(MAX_ROWS)
       .fill()
       .map(() => Array(MAX_COLS).fill(null));
@@ -474,7 +475,7 @@ const toggleModal = () => {
   is_modal_open.value = !is_modal_open.value;
 };
 
-// GAME START
+// ================================ GAME START ================================
 board.calculateAllPossibleMoves();
 </script>
 
@@ -490,12 +491,13 @@ button {
   border: none;
   border-radius: 5px;
   background-color: #ccc;
-  color: white;
+  color: #232323;
   font-size: 16px;
   cursor: pointer;
 }
 
 button:hover {
+  color: white;
   background-color: #eca075;
 }
 
@@ -543,6 +545,11 @@ button:hover {
   box-shadow: 0 0 10px 0px rgba(0, 0, 0, 0.75);
 }
 
+.taken-container .piece,
+.current-player-container .piece {
+  filter: brightness(1.1);
+}
+
 .white {
   background: radial-gradient(circle, #f9faf7, #9fa2a8 80%, #733625 100%);
 }
@@ -571,16 +578,17 @@ button:hover {
 
 .taken-container {
   display: flex;
+  flex-wrap: wrap;
   gap: 5px;
   justify-content: center;
   width: 320px;
-  height: 40px;
+  min-height: 40px;
   margin: 10px;
   padding: 5px;
-  background-color: #ccc;
-  /* border: 1px solid #6f6f6f; */
+  /* background-color: #ccc; */
+  border: 1px solid #ccc;
   border-radius: 8px;
-  box-shadow: inset 0 0 10px #aaa;
+  /* box-shadow: inset 0 0 10px #aaa; */
 }
 
 .about-text {
