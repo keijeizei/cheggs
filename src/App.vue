@@ -71,7 +71,7 @@
               @dragend="handleCellClick(rowIndex, colIndex)"
             ></div>
             <div
-              v-else-if="
+              v-if="
                 board.selected_egg &&
                 board.selected_egg.available_moves[rowIndex][colIndex]
               "
@@ -244,10 +244,18 @@ class Egg {
         continue;
       }
 
-      this.available_moves[capture.x][capture.y] = [
-        ...previous_captures,
-        { x: capture.captured_x, y: capture.captured_y },
-      ];
+      // update the move for the cell only if the capture is better
+      // this turns true if the cell is not a capture or if the new capture is longer
+      if (
+        !Array.isArray(this.available_moves[capture.x][capture.y]) ||
+        this.available_moves[capture.x][capture.y].length <=
+          previous_captures.length
+      ) {
+        this.available_moves[capture.x][capture.y] = [
+          ...previous_captures,
+          { x: capture.captured_x, y: capture.captured_y },
+        ];
+      }
 
       this.getAvailableCaptures(
         capture.x,
@@ -266,7 +274,7 @@ class Egg {
   /**
    * Check if a capture is possible. Requires:
    * - A captured egg of the opponent's color on [capture.captured_x, capture.captured_y]
-   * - An empty cell on [capture.x, capture.y]
+   * - An empty cell on [capture.x, capture.y], or the egg's position itself (for 4-capture moves)
    * @param {Object} capture - Object containing the x, y, captured_x, and captured_y of the capture
    * @returns {boolean} - Whether the capture is possible
    */
@@ -277,7 +285,8 @@ class Egg {
     return (
       capturedEgg &&
       capturedEgg.color === opponentColor &&
-      board.grid[capture.x][capture.y] === null
+      (board.grid[capture.x][capture.y] === null ||
+        (capture.x === this.x_pos && capture.y === this.y_pos))
     );
   }
 }
@@ -436,22 +445,12 @@ const handleCellClick = (rowIndex, colIndex) => {
 
   const selected_egg = board.getEggAt(rowIndex, colIndex);
 
-  if (selected_egg) {
-    // SELECTING AN EGG
-    if (selected_egg.color !== currentPlayer.value) {
-      shakeContainer();
-      return;
-    }
-
-    board.selectEgg(selected_egg);
-  } else if (board.selected_egg) {
+  if (
+    board.selected_egg &&
+    board.selected_egg.available_moves[rowIndex][colIndex]
+  ) {
     // MAKING A MOVE
-    // check if the move is valid based on the available moves
-    if (!board.selected_egg.available_moves[rowIndex][colIndex]) {
-      return;
-    }
 
-    // make the move
     board.moveEgg(board.selected_egg, rowIndex, colIndex);
 
     // check for winner
@@ -476,6 +475,14 @@ const handleCellClick = (rowIndex, colIndex) => {
       winner.value = currentPlayer.value === "white" ? "black" : "white";
       return;
     }
+  } else if (selected_egg) {
+    // SELECTING AN EGG
+    if (selected_egg.color !== currentPlayer.value) {
+      shakeContainer();
+      return;
+    }
+
+    board.selectEgg(selected_egg);
   }
 };
 
@@ -601,6 +608,7 @@ button:hover {
 }
 
 .available-move {
+  position: absolute;
   width: 20px;
   height: 20px;
   border-radius: 50%;
