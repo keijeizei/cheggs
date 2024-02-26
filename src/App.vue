@@ -88,12 +88,17 @@
       Restart
     </button>
   </div>
+  <vue3-snackbar bottom :duration="3000"></vue3-snackbar>
 </template>
 
 <script setup>
 import { reactive, ref, watch } from "vue";
+import { Vue3Snackbar } from "vue3-snackbar";
+import { useSnackbar } from "vue3-snackbar";
 import Modal from "./components/Modal.vue";
 import Switch from "./components/Switch.vue";
+
+const snackbar = useSnackbar();
 
 const MAX_ROWS = 6;
 const MAX_COLS = 5;
@@ -448,6 +453,11 @@ const handleCellClick = (rowIndex, colIndex) => {
     let possible_winner = board.checkForWinner();
     if (possible_winner) {
       winner.value = possible_winner;
+      snackbar.add({
+        type: "info",
+        text: "Game over",
+        dismissible: false,
+      });
       return;
     }
 
@@ -472,6 +482,11 @@ const restartGame = () => {
   winner.value = null;
   board.calculateAllPossibleMoves();
   console.log("Game restarted");
+  snackbar.add({
+    type: "info",
+    text: "Game restarted",
+    dismissible: false,
+  });
 };
 
 const checkIfCoordInBoard = (coords) => {
