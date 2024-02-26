@@ -18,7 +18,9 @@
   </Modal>
 
   <div class="container">
-    <div class="current-player-container">
+    <div
+      :class="{ 'current-player-container': true, shake: isContainerShaking }"
+    >
       <template v-if="!winner">
         <div v-if="currentPlayer === 'white'" class="piece white"></div>
         <div v-else class="piece black"></div>
@@ -409,6 +411,8 @@ let whiteScore = ref(0);
 let blackScore = ref(0);
 let winner = ref(null);
 
+let isContainerShaking = ref(false);
+
 let settings = ref({
   force_capture: false,
   win_by_capturing_all: false,
@@ -435,6 +439,7 @@ const handleCellClick = (rowIndex, colIndex) => {
   if (selected_egg) {
     // SELECTING AN EGG
     if (selected_egg.color !== currentPlayer.value) {
+      shakeContainer();
       return;
     }
 
@@ -499,6 +504,13 @@ const getOtherColor = (color) => (color === "white" ? "black" : "white");
 
 const toggleModal = () => {
   is_modal_open.value = !is_modal_open.value;
+};
+
+const shakeContainer = () => {
+  isContainerShaking.value = true;
+  setTimeout(() => {
+    isContainerShaking.value = false;
+  }, 500);
 };
 
 // ================================ GAME START ================================
@@ -633,5 +645,28 @@ button:hover {
 /* COLORS */
 .green-bg {
   background-color: #71e382;
+}
+
+/* EFFECTS */
+.shake {
+  animation: shakeAnimation 0.5s;
+}
+
+@keyframes shakeAnimation {
+  0% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-5px);
+  }
+  50% {
+    transform: translateX(5px);
+  }
+  75% {
+    transform: translateX(-5px);
+  }
+  100% {
+    transform: translateX(0);
+  }
 }
 </style>
