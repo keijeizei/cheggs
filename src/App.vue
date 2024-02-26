@@ -97,6 +97,7 @@
 import { reactive, ref, watch } from "vue";
 import { Vue3Snackbar } from "vue3-snackbar";
 import { useSnackbar } from "vue3-snackbar";
+import { convertCoordToNotation } from "./utils";
 import Modal from "./components/Modal.vue";
 import Switch from "./components/Switch.vue";
 
@@ -348,7 +349,11 @@ class Board {
       }
     }
 
-    console.log(`(${egg.x_pos}, ${egg.y_pos}) - (${newX}, ${newY})`);
+    console.log(
+      convertCoordToNotation(egg.x_pos, egg.y_pos),
+      "-",
+      convertCoordToNotation(newX, newY)
+    );
 
     egg.x_pos = newX;
     egg.y_pos = newY;
