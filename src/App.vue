@@ -18,7 +18,9 @@
   </Modal>
 
   <div class="container">
-    <div class="current-player-container">
+    <div
+      :class="{ 'current-player-container': true, shake: isContainerShaking }"
+    >
       <template v-if="!winner">
         <div v-if="currentPlayer === 'white'" class="piece white"></div>
         <div v-else class="piece black"></div>
@@ -43,6 +45,8 @@
             :key="colIndex"
             class="cell"
             @click="handleCellClick(rowIndex, colIndex)"
+            @dragover.prevent
+            @drop="handleCellClick(rowIndex, colIndex)"
           >
             <div
               v-if="egg && egg.color === 'white'"
@@ -51,6 +55,9 @@
                 white: true,
                 'selected-piece': egg.is_selected,
               }"
+              draggable="true"
+              @dragstart="handleCellClick(rowIndex, colIndex)"
+              @dragend="handleCellClick(rowIndex, colIndex)"
             ></div>
             <div
               v-else-if="egg && egg.color === 'black'"
@@ -59,6 +66,9 @@
                 black: true,
                 'selected-piece': egg.is_selected,
               }"
+              draggable="true"
+              @dragstart="handleCellClick(rowIndex, colIndex)"
+              @dragend="handleCellClick(rowIndex, colIndex)"
             ></div>
             <div
               v-else-if="
@@ -80,12 +90,17 @@
       Restart
     </button>
   </div>
+  <vue3-snackbar bottom :duration="3000"></vue3-snackbar>
 </template>
 
 <script setup>
 import { reactive, ref, watch } from "vue";
+import { Vue3Snackbar } from "vue3-snackbar";
+import { useSnackbar } from "vue3-snackbar";
 import Modal from "./components/Modal.vue";
 import Switch from "./components/Switch.vue";
+
+const snackbar = useSnackbar();
 
 const MAX_ROWS = 6;
 const MAX_COLS = 5;
@@ -324,6 +339,8 @@ class Board {
       }
     }
 
+    console.log(`(${egg.x_pos}, ${egg.y_pos}) - (${newX}, ${newY})`);
+
     egg.x_pos = newX;
     egg.y_pos = newY;
 
@@ -394,6 +411,8 @@ let whiteScore = ref(0);
 let blackScore = ref(0);
 let winner = ref(null);
 
+let isContainerShaking = ref(false);
+
 let settings = ref({
   force_capture: false,
   win_by_capturing_all: false,
@@ -420,6 +439,7 @@ const handleCellClick = (rowIndex, colIndex) => {
   if (selected_egg) {
     // SELECTING AN EGG
     if (selected_egg.color !== currentPlayer.value) {
+      shakeContainer();
       return;
     }
 
@@ -438,6 +458,11 @@ const handleCellClick = (rowIndex, colIndex) => {
     let possible_winner = board.checkForWinner();
     if (possible_winner) {
       winner.value = possible_winner;
+      snackbar.add({
+        type: "info",
+        text: "Game over",
+        dismissible: false,
+      });
       return;
     }
 
@@ -461,6 +486,12 @@ const restartGame = () => {
   blackScore.value = 0;
   winner.value = null;
   board.calculateAllPossibleMoves();
+  console.log("Game restarted");
+  snackbar.add({
+    type: "info",
+    text: "Game restarted",
+    dismissible: false,
+  });
 };
 
 const checkIfCoordInBoard = (coords) => {
@@ -473,6 +504,13 @@ const getOtherColor = (color) => (color === "white" ? "black" : "white");
 
 const toggleModal = () => {
   is_modal_open.value = !is_modal_open.value;
+};
+
+const shakeContainer = () => {
+  isContainerShaking.value = true;
+  setTimeout(() => {
+    isContainerShaking.value = false;
+  }, 500);
 };
 
 // ================================ GAME START ================================
@@ -607,5 +645,28 @@ button:hover {
 /* COLORS */
 .green-bg {
   background-color: #71e382;
+}
+
+/* EFFECTS */
+.shake {
+  animation: shakeAnimation 0.5s;
+}
+
+@keyframes shakeAnimation {
+  0% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-5px);
+  }
+  50% {
+    transform: translateX(5px);
+  }
+  75% {
+    transform: translateX(-5px);
+  }
+  100% {
+    transform: translateX(0);
+  }
 }
 </style>

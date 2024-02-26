@@ -28,7 +28,6 @@ const computedValue = computed({
 
 <style scoped>
 p {
-  font-family: sans-serif;
   color: white;
   margin: 0;
 }
